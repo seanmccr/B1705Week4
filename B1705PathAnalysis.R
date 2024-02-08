@@ -182,6 +182,84 @@ semPaths(fit, whatLabels = "est", layout = "tree", edge.label.cex = 0.8)
 
 
 
+
+
+
+# Basic summary stats
+summary_stats <- swimming_data %>% 
+  summary()
+print(summary_stats)
+
+library(corrplot)
+cor_matrix <- cor(swimming_data) # create the correlation matrix
+cov_matrix <- cov(swimming_data) # create the covariance matrix
+
+# Visualise  correlation matrix
+corrplot(cor_matrix, method = "number")
+
+
+# Assuming df is your dataframe and PerformanceScore is the continuous variable
+# Calculate the median of PerformanceScore for the threshold
+median_score <- median(swimming_data$stamina)
+
+# Create a new variable based on PerformanceScore being high or low
+swimming_data$stamina <- ifelse(swimming_data$stamina > median_score, 'high', 'low')
+
+# Check the first few rows to verify the new variable
+head(swimming_data)
+
+# Load necessary libraries
+library(ggplot2)
+library(dplyr)
+
+# Creating a list to store plots
+plots_list <- list()
+
+# Iterate over each independent variable to create plots
+for (var in names(swimming_data)[-5]) { # Excluding the PerformanceCategory variable
+  # Boxplot
+  boxplot <- ggplot(swimming_data, aes_string(x="factor(stamina)", y=var, fill="factor(stamina)")) +
+    geom_boxplot() +
+    labs(title=paste("Boxplot of", var, "stamina"),
+         x="stamina",
+         y=var,
+         fill="stamina") +
+    theme_minimal()
+  
+  # Density plot
+  density_plot <- ggplot(swimming_data, aes_string(x=var, fill="factor(stamina)")) +
+    geom_density(alpha=0.7) +
+    labs(title=paste("Density Plot of", var, "by stamina"),
+         x=var,
+         y="Density",
+         fill="stamina") +
+    theme_minimal()
+  
+  # Store plots in the list
+  plots_list[[paste("Boxplot", var)]] <- boxplot
+  plots_list[[paste("Density", var)]] <- density_plot
+}
+
+# Print the plots
+for (plot_name in names(plots_list)) {
+  print(plots_list[[plot_name]])
+}
+
+##### 1.3. Conducting Path Analysis #####
+
+library(lavaan)
+
+# Define our path analysis model
+model <- '
+  PerformanceScore ~ PossessionTime + Tackles + SuccessfulPasses + TerritorialGain + PenaltiesConceded
+'
+# Fit model
+fit <- sem(model, data=df, estimator="MLR") # Using Maximum Likelihood estimation for robust estimation
+
+# Summarise results
+summary(fit, standardized = TRUE, fit.measures = TRUE)
+
+
 # ----- 3. SEM Demonstration -----
 ##### 3.1. Load Data #####
 
@@ -318,6 +396,166 @@ library(semPlot)
 semPaths(fit, whatLabels = "est", layout = "tree")
 
 # ----- 4. SEM Practice -----
+##### 4.1. Load Data #####
+
+rm(list=ls())
+
+set.seed(123) # Ensure reproducibility
+
+# Number of observations
+n <- 500
+
+# Simulating independent variables
+player_age <- round(rnorm(n, 25, 4),0) # Player age in years
+years_in_NFL <- round(rnorm(n, 3, 2),0) # Years in NFL
+games_played <- round(rpois(n, 16),0) # Games played in a season
+total_yards <- round(rnorm(n, 500, 150),0) # Total yards
+touchdowns <- round(rpois(n, 5),0) # Touchdowns
+interceptions <- round(rpois(n, 2),0) # Interceptions
+tackles <- rpois(n, 40) # Tackles made
+sacks <- rpois(n, 5) # Sacks
+
+# Simulating latent variables "Performance" and "Experience"
+# For simulation purposes, we will create proxies for these latent constructs.
+performance_proxy <- tackles + sacks*2
+experience_proxy <- player_age + years_in_NFL*2
+
+# Simulating "Player Value" influenced by "Performance" and "Experience"
+player_value <- round(5*performance_proxy + 3*experience_proxy + rnorm(n, 0, 1),2) # Add noise
+# Normalise proxies to have them on a similar scale
+performance_proxy <- scale(performance_proxy)
+experience_proxy <- scale(experience_proxy)
+
+# Create dataframe
+data <- data.frame(player_age, years_in_NFL, games_played, total_yards, touchdowns, interceptions, tackles, sacks, player_value)
+
+# View the first few rows of the dataset
+head(data)
 
 
 
+library(lavaan)
+# Re-specify the model in case there is any issue. You might need to adjust the syntax if I have
+# misunderstood your model's structure.
+model <- '
+  player_value ~ tackles + sacks + player_age + years_in_NFL
+'
+
+# Print the head of the dataframe to check for missing data
+head(data)
+
+# Check for outliers and normality in the dataframe
+summary(data)
+boxplot(data)
+
+# Check missing data
+sum(is.na(data))
+
+# Let's try increasing the number of iterations and see if that helps in convergence
+fit <- sem(model, data=data, estimator="MLR", control=list(maxit=10000))
+
+# Check for convergence issues
+if(!lavInspect(fit, "converged")) {
+  warning("Model failed to converge. Consider checking your data or model specification.")
+}
+
+# Assuming the model converged, summarize the results
+summary(fit, standardized=TRUE, fit.measures=TRUE)
+
+
+
+##### 4.2. EDA #####
+# Load necessary libraries
+library(dplyr)
+library(ggplot2)
+library(lavaan)
+
+# Exploratory Data Analysis
+library(corrplot)
+cor_matrix <- cor(data) # create the correlation matrix
+cov_matrix <- cov(data) # create the covariance matrix
+
+# Visualise  correlation matrix
+corrplot(cor_matrix, method = "number")
+
+rm(cor_matrix, cov_matrix)
+
+##### 4.3. Specify the Structural Equation Model (SEM) #####
+
+# Define our path analysis model
+model <- '
+  player_value ~ tackles + sacks + player_age + years_in_NFL
+'
+# Fit model
+fit <- sem(model, data=data, estimator="MLR") # Using Maximum Likelihood estimation for robust estimation
+
+# Summarise results
+summary(fit, standardized = TRUE, fit.measures = TRUE)
+
+# Create the path diagram
+semPaths(fit, whatLabels = "est", layout = "tree", edge.label.cex = 0.8)
+
+rm(model,fit)
+
+library(lavaan)
+
+# Define the SEM model
+model <- '
+  # Latent variable definitions
+  Performance =~ tackles + sacks
+  Experience =~ player_age + years_in_NFL
+  
+  # Outcome variable
+  PlayerValue =~ player_value
+  
+  # Relationships
+  PlayerValue ~ Performance + Experience
+'
+
+
+##### 4.4. Fitting the Model #####
+
+# Scale the variables
+data$player_age <- scale(data$player_age)
+data$years_in_NFL <- scale(data$years_in_NFL)
+data$games_played <- scale(data$games_played)
+data$total_yards <- scale(data$total_yards)
+data$touchdowns <- scale(data$touchdowns)
+data$interceptions <- scale(data$interceptions)
+data$tackles <- scale(data$tackles)
+data$sacks <- scale(data$sacks)
+data$player_value <- scale(data$player_value)
+
+# Fit the model
+fit <- sem(model, data = data, estimator = "MLR", control = list(maxit = 25000)) # Increase max iterations to 10000
+
+# Model summary
+summary(fit, fit.measures = TRUE)
+
+##### 4.5. Inspect the Model #####
+
+# Model Estimation Summary Estimates: This section shows the estimated parameters of the model. In SEM, these include factor loadings 
+# (relationships between observed variables and latent variables), regression weights (relationships among latent variables), and variances and covariances of the variables.
+
+# Factor Loadings: Indicate how strongly each observed variable represents the latent variable. Higher absolute values indicate a stronger relationship.
+# Regression Weights: Show the direction and strength of the relationships between latent variables.
+# Significance: Usually indicated by p-values. A p-value less than 0.05 typically suggests that the parameter is significantly different from zero, lending support to that part of the model.
+
+# Fit Indices The output provides various fit indices which help in evaluating how well the model fits the data. Common indices include:
+# Chi-Square Test of Model Fit (χ²): A non-significant chi-square (p > 0.05) suggests a good fit. However, it’s sensitive to sample size.
+# Comparative Fit Index (CFI): Values closer to 1 indicate a good fit, with values above 0.90 or 0.95 often considered indicative of a good fit.
+# Tucker-Lewis Index (TLI): Similar to CFI, with values close to 1 suggesting a good fit. Values above 0.90 are typically considered good.
+# Root Mean Square Error of Approximation (RMSEA): Values less than 0.05 indicate a close fit, values up to 0.08 represent a reasonable error of approximation, and values greater than 0.10 suggest a poor fit.
+# Standardized Root Mean Square Residual (SRMR): Represents the difference between the observed correlation and the model-predicted correlation. Values less than 0.08 are generally considered good.
+
+##### 4.6. Evaluate the Model Fit ##### 
+# Fit indices
+fitMeasures(fit)
+
+
+##### 4.7. Visual Output #####
+
+library(semPlot)
+
+# SEM plot
+semPaths(fit, whatLabels = "est", layout = "tree")
